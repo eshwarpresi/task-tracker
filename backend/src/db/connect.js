@@ -1,18 +1,12 @@
-// backend/src/db/connect.js
-const Database = require('better-sqlite3');
-const db = new Database('task_tracker.db');
+import fs from "fs";
+const DB_FILE = "./src/db/data.json";
 
-// Create tasks table (allow Completed status and default to Open)
-db.exec(`
-  CREATE TABLE IF NOT EXISTS tasks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    description TEXT,
-    priority TEXT CHECK(priority IN ('Low','Medium','High')) NOT NULL DEFAULT 'Medium',
-    due_date TEXT NOT NULL,
-    status TEXT CHECK(status IN ('Open','In Progress','Completed')) NOT NULL DEFAULT 'Open',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`);
+export function readData() {
+  if (!fs.existsSync(DB_FILE)) return [];
+  const data = fs.readFileSync(DB_FILE, "utf-8");
+  return JSON.parse(data || "[]");
+}
 
-module.exports = db;
+export function writeData(data) {
+  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+}

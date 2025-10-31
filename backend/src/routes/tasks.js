@@ -1,89 +1,105 @@
 // backend/src/routes/tasks.js
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const router = express.Router();
-const db = require('../db/connect');
 
-// Add new task
+const DB_PATH = path.join(__dirname, '../db/data.json');
+
+// Helper functions
+function readData() {
+  if (!fs.existsSync(DB_PATH)) return [];
+  const data = fs.readFileSync(DB_PATH, 'utf-8');
+  return JSON.parse(data || '[]');
+}
+
+function writeData(data) {
+  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+}
+
+// ➕ Add new task
 router.post('/', (req, res) => {
   const { title, description, priority, due_date } = req.body;
   if (!title || !due_date) {
     return res.status(400).json({ error: 'Title and due_date are required' });
   }
 
-  const stmt = db.prepare(`
-    INSERT INTO tasks (title, description, priority, due_date, status)
-    VALUES (?, ?, ?, ?, ?)
-  `);
-  const info = stmt.run(title, description || '', priority || 'Medium', due_date, 'Open');
-  res.json({ id: info.lastInsertRowid, message: 'Task added' });
+  const tasks = readData();
+  const newTask = {
+    id: Date.now(),
+    title,
+    description: description || '',
+    priority: priority || 'Medium',
+    due_date,
+    status: 'Open',
+  };
+  tasks.push(newTask);
+  writeData(tasks);
+  res.json({ message: 'Task added', task: newTask });
 });
 
-// Get all tasks with filters and sort
-// supports: ?status=Open&priority=High&sort=due_date|priority
+// 📋 Get all tasks with filters and sort
 router.get('/', (req, res) => {
   const { status, priority, sort } = req.query;
-  let query = 'SELECT * FROM tasks WHERE 1=1';
-  const params = [];
+  let tasks = readData();
 
-  if (status) { query += ' AND status = ?'; params.push(status); }
-  if (priority) { query += ' AND priority = ?'; params.push(priority); }
+  if (status) tasks = tasks.filter(t => t.status === status);
+  if (priority) tasks = tasks.filter(t => t.priority === priority);
 
-  // Basic sorting options (by due_date default)
   if (sort === 'priority') {
-    query += ' ORDER BY CASE priority WHEN "High" THEN 1 WHEN "Medium" THEN 2 WHEN "Low" THEN 3 END ASC, due_date ASC';
+    const order = { High: 1, Medium: 2, Low: 3 };
+    tasks.sort((a, b) => order[a.priority] - order[b.priority]);
   } else {
-    query += ' ORDER BY due_date ASC';
+    tasks.sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
   }
 
-  const tasks = db.prepare(query).all(...params);
   res.json(tasks);
 });
 
-// Update status or priority (generic)
+// ✏️ Update status or priority
 router.patch('/:id', (req, res) => {
   const { id } = req.params;
   const { status, priority } = req.body;
-  const updates = [];
-  const values = [];
+
+  const tasks = readData();
+  const task = tasks.find(t => t.id == id);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
 
   if (status) {
     const valid = ['Open', 'In Progress', 'Completed'];
-    if (!valid.includes(status)) {
-      return res.status(400).json({ error: 'Invalid status value' });
-    }
-    updates.push('status = ?');
-    values.push(status);
+    if (!valid.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+    task.status = status;
   }
 
   if (priority) {
     const validP = ['Low', 'Medium', 'High'];
-    if (!validP.includes(priority)) {
-      return res.status(400).json({ error: 'Invalid priority value' });
-    }
-    updates.push('priority = ?');
-    values.push(priority);
+    if (!validP.includes(priority)) return res.status(400).json({ error: 'Invalid priority' });
+    task.priority = priority;
   }
 
-  if (!updates.length) return res.status(400).json({ error: 'Nothing to update' });
-
-  const sql = `UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`;
-  values.push(id);
-  db.prepare(sql).run(...values);
-  res.json({ message: 'Task updated' });
+  writeData(tasks);
+  res.json({ message: 'Task updated', task });
 });
 
-// Mark task as completed (helper route)
+// ✅ Mark as completed
 router.patch('/:id/complete', (req, res) => {
   const { id } = req.params;
-  db.prepare('UPDATE tasks SET status = ? WHERE id = ?').run('Completed', id);
+  const tasks = readData();
+  const task = tasks.find(t => t.id == id);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+  task.status = 'Completed';
+  writeData(tasks);
   res.json({ message: 'Task marked as completed' });
 });
 
-// Delete task
+// 🗑️ Delete task
 router.delete('/:id', (req, res) => {
   const { id } = req.params;
-  const info = db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
-  if (info.changes === 0) return res.status(404).json({ error: 'Task not found' });
+  let tasks = readData();
+  const initialLength = tasks.length;
+  tasks = tasks.filter(t => t.id != id);
+  if (tasks.length === initialLength) return res.status(404).json({ error: 'Task not found' });
+  writeData(tasks);
   res.json({ message: 'Task deleted' });
 });
 
