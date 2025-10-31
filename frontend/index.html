@@ -1,0 +1,64 @@
+<!-- frontend/index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Task Tracker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h2>Task Tracker</h2>
+
+  <form id="taskForm">
+    <input type="text" id="title" placeholder="Title" required>
+    <input type="text" id="desc" placeholder="Description">
+    <select id="priority">
+      <option>Low</option>
+      <option selected>Medium</option>
+      <option>High</option>
+    </select>
+    <input type="date" id="due" required>
+    <button type="submit">Add Task</button>
+  </form>
+
+  <div class="controls">
+    <label>
+      Priority:
+      <select id="filterPriority">
+        <option value="">All</option>
+        <option value="High">High</option>
+        <option value="Medium">Medium</option>
+        <option value="Low">Low</option>
+      </select>
+    </label>
+
+    <label>
+      Status:
+      <select id="filterStatus">
+        <option value="">All</option>
+        <option value="Open">Open</option>
+        <option value="In Progress">In Progress</option>
+        <option value="Completed">Completed</option>
+      </select>
+    </label>
+
+    <label>
+      Sort:
+      <select id="sortBy">
+        <option value="due_date">Due date</option>
+        <option value="priority">Priority</option>
+      </select>
+    </label>
+
+    <button id="applyFilters">Apply</button>
+    <button id="clearFilters">Clear</button>
+  </div>
+
+  <h3>Smart Insights</h3>
+  <div id="insights" class="insights"></div>
+
+  <h3>All Tasks</h3>
+  <div id="tasks"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
