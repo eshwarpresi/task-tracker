@@ -1,5 +1,5 @@
 // frontend/app.js
-const API = 'http://localhost:3000';
+const API = "http://localhost:5000"; // 👈 local backend URL
 
 // Build query string helper
 function buildQuery(params) {
