@@ -1,5 +1,5 @@
-// frontend/app.js - FIXED VERSION
-const API = "https://task-tracker-backend-xxik.onrender.com"; 
+// frontend/app.js - CORRECTED VERSION
+const API = "https://task-tracker-backend-xxik.onrender.com/api";
 
 // Build query string helper
 function buildQuery(params) {
