@@ -1,54 +1,85 @@
 // backend/src/routes/insights.js
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const router = express.Router();
-const db = require('../db/connect');
+
+const DB_PATH = path.join(__dirname, '../db/data.json');
+
+function readData() {
+  if (!fs.existsSync(DB_PATH)) return [];
+  const data = fs.readFileSync(DB_PATH, 'utf-8');
+  return JSON.parse(data || '[]');
+}
 
 router.get('/', (req, res) => {
-  const totalRow = db.prepare('SELECT COUNT(*) as count FROM tasks').get();
-  const total = totalRow.count || 0;
-
-  const openRow = db.prepare(`SELECT COUNT(*) as count FROM tasks WHERE status = 'Open'`).get();
-  const open = openRow.count || 0;
-
-  const completedRow = db.prepare(`SELECT COUNT(*) as count FROM tasks WHERE status = 'Completed'`).get();
-  const completed = completedRow.count || 0;
-
-  const priorityCounts = db.prepare('SELECT priority, COUNT(*) as count FROM tasks GROUP BY priority').all();
-  const priorityMap = {};
-  priorityCounts.forEach(r => { priorityMap[r.priority] = r.count; });
-
-  // tasks due in next 3 days (including today)
-  const dueSoonRow = db.prepare("SELECT COUNT(*) as count FROM tasks WHERE julianday(due_date) - julianday('now') <= 3 AND julianday(due_date) - julianday('now') >= 0").get();
-  const dueSoon = dueSoonRow.count || 0;
-
-  // busiest day (count by due_date)
-  const busiest = db.prepare('SELECT due_date, COUNT(*) as cnt FROM tasks GROUP BY due_date ORDER BY cnt DESC LIMIT 1').get();
-  const busiestDay = busiest ? { date: busiest.due_date, count: busiest.cnt } : null;
-
-  // Determine dominant priority
-  let dominantPriority = null;
-  if (priorityCounts.length) {
-    priorityCounts.sort((a,b) => b.count - a.count);
-    dominantPriority = priorityCounts[0].priority;
+  try {
+    const tasks = readData();
+    const total = tasks.length;
+    const open = tasks.filter(t => t.status === 'Open').length;
+    const completed = tasks.filter(t => t.status === 'Completed').length;
+    
+    // Priority counts
+    const priorityMap = {};
+    tasks.forEach(task => {
+      priorityMap[task.priority] = (priorityMap[task.priority] || 0) + 1;
+    });
+    
+    // Tasks due in next 3 days
+    const today = new Date();
+    const threeDaysLater = new Date();
+    threeDaysLater.setDate(today.getDate() + 3);
+    
+    const dueSoon = tasks.filter(task => {
+      const dueDate = new Date(task.due_date);
+      return dueDate >= today && dueDate <= threeDaysLater;
+    }).length;
+    
+    // Busiest day
+    const dateCounts = {};
+    tasks.forEach(task => {
+      dateCounts[task.due_date] = (dateCounts[task.due_date] || 0) + 1;
+    });
+    
+    let busiestDay = null;
+    Object.entries(dateCounts).forEach(([date, count]) => {
+      if (!busiestDay || count > busiestDay.count) {
+        busiestDay = { date, count };
+      }
+    });
+    
+    // Determine dominant priority
+    let dominantPriority = null;
+    if (Object.keys(priorityMap).length) {
+      dominantPriority = Object.entries(priorityMap)
+        .sort((a, b) => b[1] - a[1])[0][0];
+    }
+    
+    // Build readable summary
+    let summary = `You have ${total} task${total === 1 ? '' : 's'}. `;
+    if (open) summary += `${open} open. `;
+    if (completed) summary += `${completed} completed. `;
+    if (dominantPriority) summary += `Most tasks are ${dominantPriority} priority. `;
+    if (dueSoon) summary += `${dueSoon} due within 3 days. `;
+    if (busiestDay) summary += `Busiest day: ${busiestDay.date} (${busiestDay.count}).`;
+    
+    res.json({
+      total,
+      open,
+      completed,
+      priority: priorityMap,
+      dueSoon,
+      busiestDay,
+      summary: summary.trim() || "No tasks yet. Add your first task!"
+    });
+    
+  } catch (error) {
+    console.error('Insights error:', error);
+    res.status(500).json({ 
+      summary: "Error loading insights",
+      error: error.message 
+    });
   }
-
-  // Build readable summary
-  let summary = `You have ${total} task${total === 1 ? '' : 's'}. `;
-  if (open) summary += `${open} open. `;
-  if (completed) summary += `${completed} completed. `;
-  if (dominantPriority) summary += `Most tasks are ${dominantPriority} priority. `;
-  if (dueSoon) summary += `${dueSoon} due within 3 days. `;
-  if (busiestDay) summary += `Busiest day: ${busiestDay.date} (${busiestDay.count}).`;
-
-  res.json({
-    total,
-    open,
-    completed,
-    priority: priorityMap,
-    dueSoon,
-    busiestDay,
-    summary: summary.trim()
-  });
 });
 
 module.exports = router;
